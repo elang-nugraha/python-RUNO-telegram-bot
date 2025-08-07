@@ -313,7 +313,7 @@ async def processTransaction(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # generate recipt
     generateRecipt.generateRecipt(data)
     chat_id = update.effective_chat.id
-    with open("recipt.pdf", "rb") as file:
+    with open("utils/utilsData/recipt.pdf", "rb") as file:
         await context.bot.send_document(chat_id=chat_id, document=file, filename="recipt.pdf")
 
     return ConversationHandler.END

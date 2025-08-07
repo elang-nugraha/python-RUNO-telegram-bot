@@ -11,7 +11,7 @@ class PDF(FPDF):
 
     def header(self):
         # font
-        image = 'example/gambar.png'
+        image = 'utilsData/gambar.png'
         imageWidth = self.width - 50
         self.image(image, (self.width / 2) - (imageWidth / 2), 3, imageWidth)
 
@@ -79,4 +79,4 @@ def generateRecipt(data):
     pdf.add_page()
     pdf.body()
 
-    pdf.output('recipt.pdf')
+    pdf.output('data/recipt.pdf')
