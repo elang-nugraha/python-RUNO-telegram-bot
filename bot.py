@@ -11,6 +11,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, ConversationHandler, 
 # class
 from utils.user import User
 from utils.item import Item
+import utils.generateRecipt as generateRecipt
 
 
 # learn how to logging
@@ -308,21 +309,18 @@ async def processTransaction(update: Update, context: ContextTypes.DEFAULT_TYPE)
         json.dump(transaction, userFile, indent=4)
 
     await update.message.reply_text("Transcation recorded...")
-    await generateRecipt(update)
+
+    # generate recipt
+    generateRecipt.generateRecipt(data)
+    chat_id = update.effective_chat.id
+    with open("recipt.pdf", "rb") as file:
+        await context.bot.send_document(chat_id=chat_id, document=file, filename="recipt.pdf")
+
     return ConversationHandler.END
-
-async def generateRecipt(update : Update):
-
-    await update.message.reply_document()
     
-
-
 async def cancelTransaction(update, context):
     await update.message.reply_text("Transaction canceled...")
     return ConversationHandler.END
-
-
-
 
 
 # app
