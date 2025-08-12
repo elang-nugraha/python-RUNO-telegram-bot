@@ -336,12 +336,16 @@ async def getAllData(update, context):
     except:
         logging.warning("No user Data")
 
+
     for i in os.listdir('Data/'):
         if os.path.isdir(f'Data/{i}'):
             for j in os.listdir(f'Data/{i}'):
                 for k in os.listdir(f'Data/{i}/{j}'):
-                    with open(f"Data/{i}/{j}/{k}", "rb") as file:
-                        await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename=f"{k}")
+                    try:
+                        with open(f"Data/{i}/{j}/{k}", "rb") as file:
+                            await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename=f"{k}")
+                    except:
+                        logging.warning("No Data")
 
 # app
 app = ApplicationBuilder().token(TOKEN).build()
