@@ -67,8 +67,6 @@ def getUsersDataMongo():
 def validateUser(user: Update.effective_user):
     # get users data
     users = getUsersDataMongo()
-    print(users)
-
     if users.get(str(user.id)):
         return True
     else:
@@ -77,13 +75,12 @@ def validateUser(user: Update.effective_user):
         return False
 
 async def userRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    users = getUsersData()
+    users = getUsersDataMongo()
     newUser = User(update.effective_user.id, update.effective_user.full_name)
     registration = os.environ.get('USER_REGIS')
-    await update.message.reply_text(f"{registration}")
 
     # add new user
-    if  registration and newUser.getId() not in users:
+    if  registration and str(newUser.getId()) not in users:
         # # add new user
         # users.update(newUser.getDict())
 
