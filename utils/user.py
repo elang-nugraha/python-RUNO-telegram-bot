@@ -16,3 +16,9 @@ class User:
                 "name" : self.name
             }
         }
+
+    def getDictMongo(self):
+        return {
+            "chatId" : self.id,
+            "name" : self.name
+        }

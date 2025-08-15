@@ -1,11 +1,11 @@
 import json
 import operator
 import os
-from fpdf import FPDF
-# from datetime import date  # reminder feature (upcoming)
+from dotenv import load_dotenv
+from pymongo import MongoClient
 
 #Telegram
-from telegram import Update, Message
+from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
 # class
@@ -13,15 +13,19 @@ from utils.user import User
 from utils.item import Item
 import utils.generateRecipt as generateRecipt
 
-
 # learn how to logging
 import logging
 logging.basicConfig(level= logging.INFO)
 
+# load env
+load_dotenv()
 
 # Telegram Token
-TOKEN = '7836398649:AAGxiIukp6eJovY8fULUUyvuSMVk3rfwWwY'
-registration = False
+TOKEN = os.getenv("TELEGRAM_KEY")
+# Mongo database
+client = MongoClient(os.getenv("DB_CONNECTION"))
+db = client[os.getenv("DB_DATABASE")]
+
 ops = {
     '+' : operator.add,
     '-' : operator.sub
@@ -36,6 +40,10 @@ def storeUserData(users):
     with open("Data/User.json", "w") as userFile:
         json.dump(users, userFile, indent=4)
 
+def storeUserDataMongo(user):
+    userDB = db["user"]
+    userDB.insert_one(user)
+
 def getUsersData():
     try:
         with open("Data/User.json", "r") as userFile:
@@ -45,38 +53,57 @@ def getUsersData():
     except FileNotFoundError:
         return {}
 
+def getUsersDataMongo():
+    userDB = db["user"]
+    userData = {}
+    for i in userDB.find():
+        data = {
+            f"{i.get("chatId")}" : i
+        }
+        userData.update(data)
+
+    return(userData)
+
 def validateUser(user: Update.effective_user):
     # get users data
-    users = getUsersData()
+    users = getUsersDataMongo()
 
     if users.get(str(user.id)):
         return True
     else:
+        bot = Bot(TOKEN)
+        bot.sendMessage(5761507238, f"{user.id} {user.full_name}, wants to user the Bot")
         return False
 
 async def userRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = getUsersData()
     newUser = User(update.effective_user.id, update.effective_user.full_name)
+    registration = os.environ.get('USER_REGIS')
+    await update.message.reply_text(f"{registration}")
 
     # add new user
     if  registration and newUser.getId() not in users:
-        # add new user
-        users.update(newUser.getDict())
+        # # add new user
+        # users.update(newUser.getDict())
 
-        # rewrite json file          
-        storeUserData(users)
+        # # rewrite json file          
+        # storeUserData(users)
+
+        # store data in mongo
+        storeUserDataMongo(newUser.getDictMongo())
         await update.message.reply_text(f"user {update.effective_user.full_name} registered")
+    else :
+        await update.message.reply_text(f"user {update.effective_user.full_name}, already registered")
 
 async def openRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if(validateUser(update.effective_user)):
-        registration = True
+        os.environ['USER_REGIS'] = "True"
         await update.message.reply_text("Regitration is open")
 
 async def closeRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if(validateUser(update.effective_user)):
-        registration = False
+        os.environ['USER_REGIS'] = "False"
         await update.message.reply_text("Regitration is closed")
-
 
 # stock and item handling
 def storeStockData(stock):
@@ -92,14 +119,20 @@ def getStockData():
     except FileNotFoundError:
         return {}
 
+def getStockDataMongo():
+    stockDB= db["stock"]
+    stockData = stockDB.find()
+    stocks = {}
+    for i in stockData:
+        stocks.update(i)
+
+    return stocks
+    
 async def getStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if(validateUser(update.effective_user)):
         # get stock data
         stock = getStockData()
 
-        # refactor display as table
-
-        
         if len(stock) > 0:
             message = "----- STOCK -----"
             for i in stock:
@@ -181,6 +214,18 @@ async def doneStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # transation handling
+def storeTransactionDataMongo(update, data):
+    transactionData = {
+        "day" : data["date"]["day"],
+        "month" : data["date"]["month"],
+        "year" : data["date"]["year"],
+        "customer" : data["customer"],
+        "order" : data["order"]
+    }
+
+    transactionDB = db["transaction"]
+    transactionDB.insert_one(transactionData)
+
 async def transactionStart(update, context):
     if(validateUser(update.effective_user)):
         await update.message.reply_text("Input order date: ([dd]-[mm]-[yyyy])")
@@ -219,7 +264,6 @@ async def transactionValidation(update, context):
     itemMessage = message.split("\n")
 
     stockData = getStockData()
-    print(stockData)
 
     totalPrice = 0
     order = {}
@@ -289,6 +333,9 @@ async def processTransaction(update: Update, context: ContextTypes.DEFAULT_TYPE)
         item = order.get(i)
         inputMessage = inputMessage + f"\n{i} . - . {item["quantity"]}"
     await inputStockItem(update, context, inputMessage.strip())
+
+    # Store transaction data to mongo
+    storeTransactionDataMongo(update, data)
     
     # Store transaction to database
     date = data.get("date")
@@ -326,13 +373,13 @@ async def cancelTransaction(update, context):
 async def getAllData(update, context):
     try:
         with open("Data/Stock.json", "rb") as file:
-            await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename="stock.pdf")
+            await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename="stock.json")
     except:
         logging.warning("No stock data")
     
     try:
-        with open("Data/User.json", "rb") as file:
-            await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename="user.pdf")
+        users = getUsersDataMongo()
+        await update.message.reply_text(f"{users}")
     except:
         logging.warning("No user Data")
 
