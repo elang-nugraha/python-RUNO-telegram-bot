@@ -58,7 +58,7 @@ def getUsersDataMongo():
     userData = {}
     for i in userDB.find():
         data = {
-            f"{i.get("chatId")}" : i
+            f"{int(i.get("chatId"))}" : i
         }
         userData.update(data)
 
