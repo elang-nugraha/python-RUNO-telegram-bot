@@ -67,6 +67,7 @@ def getUsersDataMongo():
 def validateUser(user: Update.effective_user):
     # get users data
     users = getUsersDataMongo()
+    print(users)
 
     if users.get(str(user.id)):
         return True
