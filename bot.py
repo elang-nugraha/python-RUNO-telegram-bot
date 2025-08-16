@@ -81,13 +81,7 @@ async def userRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # add new user
     if  registration and str(newUser.getId()) not in users:
-        # # add new user
-        # users.update(newUser.getDict())
-
-        # # rewrite json file          
-        # storeUserData(users)
-
-        # store data in mongo
+        # store user data
         storeUserDataMongo(newUser.getDictMongo())
         await update.message.reply_text(f"user {update.effective_user.full_name} registered")
     else :
@@ -108,28 +102,54 @@ def storeStockData(stock):
     with open("Data/Stock.json", "w") as userFile:
         json.dump(stock, userFile, indent=4)
 
+def storeStockDataMongo(stock):
+    print("hell nah")
+
+def updateStockDataMongo(stock):
+    stockDB= db["stock"]
+
+    # multiple update handling
+    for i in stock:
+        data = stock.get(i)
+        if data.get("updated"):
+            filter = {"name": i}
+            update = {
+                "$set": {
+                    "quantity": data.get("quantity")
+                },
+                "$currentDate": {
+                    "lastModified": True
+                }
+            }
+
+            stockDB.update_one(filter, update)
+            print("hell nah")
+
 def getStockData():
     try: 
         with open("Data/Stock.json", "r") as userFile:
             stock = json.load(userFile)
-
+ 
         return stock
     except FileNotFoundError:
         return {}
 
 def getStockDataMongo():
     stockDB= db["stock"]
-    stockData = stockDB.find()
     stocks = {}
-    for i in stockData:
-        stocks.update(i)
+    for i in stockDB.find():
+        data = {
+            f"{i.get("name")}" : i
+        }
+
+        stocks.update(data)
 
     return stocks
     
 async def getStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if(validateUser(update.effective_user)):
         # get stock data
-        stock = getStockData()
+        stock = getStockDataMongo()
 
         if len(stock) > 0:
             message = "----- STOCK -----"
@@ -151,14 +171,16 @@ async def inputItem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     a = update.effective_message.text
     b = a.split(" . ")
 
+    # item check
+    stock = getStockDataMongo()
+    if stock.get(b[0]):
+        return ConversationHandler.END
+
     # new item 
     item = Item(b[0], int(b[1]), int(b[2]), None)
 
-    stock = getStockData()
-    stock.update(item.getDict())
-
-    # rewrite json file
-    storeStockData(stock)
+    # store item
+    storeStockDataMongo(item.getDictMongo())
 
     await update.message.reply_text(f"Successfully add {b[0]}")
     await getStock(update, context)
@@ -179,8 +201,12 @@ async def inputStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def inputStockItem(update : Update, context, message : str):
+    # handling multiple update
     itemMessage = message.split("\n")
-    stock = getStockData()
+
+    # get stock data
+    stock = getStockDataMongo()
+
     for i in itemMessage:
         text = i.split(" . ")
         itemData = stock.get(text[0])
@@ -196,14 +222,17 @@ async def inputStockItem(update : Update, context, message : str):
             newQuantity = ops[text[1]](item.getQuantity(), quantity)
             if  newQuantity > 0:
                 item.setQuantity(newQuantity)
-                stock.update(item.getDict())
+
+                # update item
+                stock.update(item.getDictMongoUpdate())
                 await update.message.reply_text(f"{text[0]} stock item is updated")
             else:
                  await update.message.reply_text(f"There is no {text[0]} ready in the stock items")
         else:
             await update.message.reply_text(f"There is no {text[0]} in stock items")
 
-    storeStockData(stock)
+    # multiple update handling
+    updateStockDataMongo(stock)
     await getStock(update, context)
 
 async def doneStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -261,7 +290,9 @@ async def transactionValidation(update, context):
     message = update.effective_message.text
     itemMessage = message.split("\n")
 
-    stockData = getStockData()
+    # stockData = getStockData()
+    # using mongo database
+    stockData = getStockDataMongo()
 
     totalPrice = 0
     order = {}
@@ -278,9 +309,11 @@ async def transactionValidation(update, context):
         item = Item(None, None, None, orderItem)
         if orderItem == None:
             await update.message.reply_text("No", i[0], " in stock")
+            await update.message.reply_text("Add", i[0], " on /addItem first")
             return ConversationHandler.END
         elif item.getQuantity() < sumOrder:
             await update.message.reply_text("No stock ready for", i[0])
+            await update.message.reply_text("Update", i[0], " quantity on /updateStock first")
             return ConversationHandler.END
         
         price = item.getPrice() * sumOrder
@@ -298,6 +331,7 @@ async def transactionValidation(update, context):
             "Total Price" : totalPrice
         })
     
+    # confirmation message
     date = context.user_data["transaction"].get("date")
     confirmationMessage = f"Date \t: {date.get("day")} - {date.get("month")} - {date.get("year")}"
     confirmationMessage += f"\nCustmer \t: {context.user_data["transaction"].get("customer")}"
@@ -318,7 +352,7 @@ async def processTransaction(update: Update, context: ContextTypes.DEFAULT_TYPE)
     message = update.effective_message.text
     message = message.strip()
 
-    if message.strip() == "n":
+    if message.strip().lower() == "n":
         await update.message.reply_text("transaction cancelled...")
         return ConversationHandler.END
     

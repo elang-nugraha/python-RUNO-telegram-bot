@@ -32,5 +32,22 @@ class Item:
             }
         }
     
+    def getDictMongo(self):
+        return {
+            "name" : self.name,
+            "price" : self.price,
+            "quantity" : self.quantity
+        }
+    
+    def getDictMongoUpdate(self):
+        return {
+            self.name : {
+                "price" : self.price,
+                "quantity" : self.quantity,
+                "updated" : True
+            }
+        }
+    
+    
 
     
