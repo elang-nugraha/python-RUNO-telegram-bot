@@ -3,6 +3,7 @@ import operator
 import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from datetime import datetime
 
 #Telegram
 from telegram import Update, Bot
@@ -64,14 +65,17 @@ def getUsersDataMongo():
 
     return(userData)
 
+async def sendRegisMessageAdmin(id, fullName):
+        bot = Bot(TOKEN)
+        await bot.sendMessage(5761507238, f"{id} {fullName}, wants to user the Bot")
+
+
 def validateUser(user: Update.effective_user):
     # get users data
     users = getUsersDataMongo()
     if users.get(str(user.id)):
         return True
     else:
-        bot = Bot(TOKEN)
-        bot.sendMessage(5761507238, f"{user.id} {user.full_name}, wants to user the Bot")
         return False
 
 async def userRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -103,7 +107,8 @@ def storeStockData(stock):
         json.dump(stock, userFile, indent=4)
 
 def storeStockDataMongo(stock):
-    print("hell nah")
+    stockDB = db["stock"]
+    stockDB.insert_one(stock)
 
 def updateStockDataMongo(stock):
     stockDB= db["stock"]
@@ -162,6 +167,7 @@ async def getStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # add or update item
 async def addItem(update : Update, context : ContextTypes.DEFAULT_TYPE):
     if(validateUser(update.effective_user)):
+        await getStock(update, context)
         await update.message.reply_text("input item ([name] . [price] . [quantity])")
         await update.message.reply_text("type /done to end the sesion")
         return "inputItem"
@@ -174,10 +180,11 @@ async def inputItem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # item check
     stock = getStockDataMongo()
     if stock.get(b[0]):
+        await update.message.reply_text(f"{b[0]} already at stock")
         return ConversationHandler.END
 
     # new item 
-    item = Item(b[0], int(b[1]), int(b[2]), None)
+    item = Item(b[0].strip(), int(b[1]), int(b[2]), None)
 
     # store item
     storeStockDataMongo(item.getDictMongo())
@@ -209,6 +216,7 @@ async def inputStockItem(update : Update, context, message : str):
 
     for i in itemMessage:
         text = i.split(" . ")
+        text[0] = text[0].strip()
         itemData = stock.get(text[0])
 
         if itemData:
@@ -241,7 +249,7 @@ async def doneStock(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # transation handling
-def storeTransactionDataMongo(update, data):
+def storeTransactionDataMongo(data):
     transactionData = {
         "day" : data["date"]["day"],
         "month" : data["date"]["month"],
@@ -253,6 +261,17 @@ def storeTransactionDataMongo(update, data):
     transactionDB = db["transaction"]
     transactionDB.insert_one(transactionData)
 
+def getTransactionDataMongo():
+    transactionDB= db["transaction"]
+    transactions = {}
+    for i,j in enumerate(transactionDB.find()):
+        data = {
+            f"{j}" : i
+        }
+        transactions.update(data)
+
+    return transactions
+
 async def transactionStart(update, context):
     if(validateUser(update.effective_user)):
         await update.message.reply_text("Input order date: ([dd]-[mm]-[yyyy])")
@@ -260,15 +279,21 @@ async def transactionStart(update, context):
 
 async def processCustomer(update, context : ContextTypes.DEFAULT_TYPE):
         message = update.effective_message.text
-        iteMessage = message.split("-")
-        dateData = {
-            "day" : iteMessage[0],
-            "month" : iteMessage[1],
-            "year" : iteMessage[2]
-        }
+
+        # process message as a datetime first
+        try:
+            format_string = "%d-%m-%Y"
+            date = datetime.strptime(message, format_string)
+        except:
+            await update.message.reply_text("Cannot process order date")
+            return "start"
 
         context.user_data["transaction"] = {
-            "date" : dateData
+            "date" : {
+                "day" : date.day,
+                "month" : date.month,
+                "year" : date.year
+            }
         }
 
         await update.message.reply_text("Input Custmer Name:")
@@ -290,10 +315,7 @@ async def transactionValidation(update, context):
     message = update.effective_message.text
     itemMessage = message.split("\n")
 
-    # stockData = getStockData()
-    # using mongo database
     stockData = getStockDataMongo()
-
     totalPrice = 0
     order = {}
 
@@ -367,25 +389,7 @@ async def processTransaction(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await inputStockItem(update, context, inputMessage.strip())
 
     # Store transaction data to mongo
-    storeTransactionDataMongo(update, data)
-    
-    # Store transaction to database
-    date = data.get("date")
-    # foder check
-    folderPath = f"Data/{date.get("year")}/{date.get("month")}"
-    if not os.path.exists(folderPath):
-        os.makedirs(folderPath)
-
-    filePath = folderPath + f"/{date.get("day")}-{date.get("month")}-{date.get("year")}.json"
-    transaction = []
-    # file check
-    if os.path.exists(filePath):
-        with open(filePath, "r") as userFile:
-            transaction = json.load(userFile)
-
-    transaction.append(data)
-    with open(filePath, "w") as userFile:
-        json.dump(transaction, userFile, indent=4)
+    storeTransactionDataMongo(data)
 
     await update.message.reply_text("Transcation recorded...")
 
@@ -404,8 +408,8 @@ async def cancelTransaction(update, context):
 # get all data
 async def getAllData(update, context):
     try:
-        with open("Data/Stock.json", "rb") as file:
-            await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename="stock.json")
+        stock = getStockDataMongo
+        await update.message.reply_text(f"{stock}")
     except:
         logging.warning("No stock data")
     
@@ -415,16 +419,11 @@ async def getAllData(update, context):
     except:
         logging.warning("No user Data")
 
-
-    for i in os.listdir('Data/'):
-        if os.path.isdir(f'Data/{i}'):
-            for j in os.listdir(f'Data/{i}'):
-                for k in os.listdir(f'Data/{i}/{j}'):
-                    try:
-                        with open(f"Data/{i}/{j}/{k}", "rb") as file:
-                            await context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename=f"{k}")
-                    except:
-                        logging.warning("No Data")
+    try:
+        transactions = getTransactionDataMongo()
+        await update.message.reply_text(f"{transactions}")
+    except:
+        logging.warning("No transaction Data")
 
 # app
 app = ApplicationBuilder().token(TOKEN).build()
@@ -463,6 +462,7 @@ app.add_handler(CommandHandler("getStock", getStock))
 transactionConv = ConversationHandler(
     entry_points=[CommandHandler("addTransaction", transactionStart)],
     states={
+        "start" : [MessageHandler(filters.TEXT & ~filters.COMMAND, transactionStart)],
         "item": [MessageHandler(filters.TEXT & ~filters.COMMAND, processItem)],
         "customer": [MessageHandler(filters.TEXT & ~filters.COMMAND, processCustomer)],
         "transaction": [MessageHandler(filters.TEXT & ~filters.COMMAND, transactionValidation)],
@@ -477,7 +477,8 @@ app.add_handler(transactionConv)
 
 # test message handling
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (validateUser(update.effective_user)):    
+    if not (validateUser(update.effective_user)):  
+        await sendRegisMessageAdmin(update.effective_user.id, update.effective_user.full_name) 
         await update.message.reply_text("Ask admin to register account..")
     else :
         await update.message.reply_text(update.effective_message)
