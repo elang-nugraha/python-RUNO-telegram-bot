@@ -37,22 +37,23 @@ async def startCommand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Heloo welcome to RUNO bot...")
 
 # User handling
-def storeUserData(users):
-    with open("Data/User.json", "w") as userFile:
-        json.dump(users, userFile, indent=4)
+# store data using json file
+# def storeUserData(users):
+#     with open("Data/User.json", "w") as userFile:
+#         json.dump(users, userFile, indent=4)
+# 
+# def getUsersData():
+#     try:
+#         with open("Data/User.json", "r") as userFile:
+#             users = json.load(userFile)
+
+#         return users
+#     except FileNotFoundError:
+#         return {}
 
 def storeUserDataMongo(user):
     userDB = db["user"]
     userDB.insert_one(user)
-
-def getUsersData():
-    try:
-        with open("Data/User.json", "r") as userFile:
-            users = json.load(userFile)
-
-        return users
-    except FileNotFoundError:
-        return {}
 
 def getUsersDataMongo():
     userDB = db["user"]
@@ -102,9 +103,19 @@ async def closeRegistration(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Regitration is closed")
 
 # stock and item handling
-def storeStockData(stock):
-    with open("Data/Stock.json", "w") as userFile:
-        json.dump(stock, userFile, indent=4)
+# store data using json file
+# def storeStockData(stock):
+#     with open("Data/Stock.json", "w") as userFile:
+#         json.dump(stock, userFile, indent=4)
+# 
+# def getStockData():
+#     try: 
+#         with open("Data/Stock.json", "r") as userFile:
+#             stock = json.load(userFile)
+ 
+#         return stock
+#     except FileNotFoundError:
+#         return {}
 
 def storeStockDataMongo(stock):
     stockDB = db["stock"]
@@ -128,16 +139,6 @@ def updateStockDataMongo(stock):
             }
 
             stockDB.update_one(filter, update)
-            print("hell nah")
-
-def getStockData():
-    try: 
-        with open("Data/Stock.json", "r") as userFile:
-            stock = json.load(userFile)
- 
-        return stock
-    except FileNotFoundError:
-        return {}
 
 def getStockDataMongo():
     stockDB= db["stock"]
@@ -255,6 +256,7 @@ def storeTransactionDataMongo(data):
         "month" : data["date"]["month"],
         "year" : data["date"]["year"],
         "customer" : data["customer"],
+        "Total price" : data["Total Price"],
         "order" : data["order"]
     }
 
@@ -406,7 +408,7 @@ async def cancelTransaction(update, context):
     return ConversationHandler.END
 
 # get all data
-async def getAllData(update, context):
+async def getAllData(update):
     try:
         stock = getStockDataMongo
         await update.message.reply_text(f"{stock}")
@@ -424,6 +426,8 @@ async def getAllData(update, context):
         await update.message.reply_text(f"{transactions}")
     except:
         logging.warning("No transaction Data")
+
+# get report data (monthly)
 
 # app
 app = ApplicationBuilder().token(TOKEN).build()
@@ -481,8 +485,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await sendRegisMessageAdmin(update.effective_user.id, update.effective_user.full_name) 
         await update.message.reply_text("Ask admin to register account..")
     else :
+        botCommands = "/userRegistration \n " \
+        "/openRegistration \n " \
+        "/closeRegistration \n" \
+        "/addItem \n" \
+        "/updateStock \n" \
+        "/getStock \n" \
+        "/addTransaction"
+
         await update.message.reply_text(update.effective_message)
         await update.message.reply_text(update.effective_chat)
+        await update.message.reply_text(botCommands)
 
 # handle user message
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
